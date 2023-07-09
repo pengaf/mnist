@@ -11,4 +11,5 @@ project(mnist)
 set(CMAKE_DEBUG_POSTFIX _d)
 
 add_subdirectory(mnist2bmp)
+add_subdirectory(regression)
 add_subdirectory(fnn)

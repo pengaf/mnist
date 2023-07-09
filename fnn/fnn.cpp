@@ -73,100 +73,115 @@ bool ReadLabelData(MnistLabelHeader& header, std::vector<char>& data, const char
 	return true;
 }
 
-class ActivationFunction
+//class ActivationFunction
+//{
+//public:
+//	virtual void forward(float* outputs, const float* inputs, uint32_t dim) = 0;
+//	virtual void backward(float* outputs, const float* inputs, uint32_t dim) = 0;
+//};
+//
+//class Sigmoid : public ActivationFunction
+//{
+//public:
+//	virtual void forward(float* outputs, const float* inputs, uint32_t dim)
+//	{
+//		for (uint32_t i = 0; i < dim; ++i)
+//		{
+//			outputs[i] = 1.0 / (1.0 + exp(-inputs[i]));
+//		}
+//	}
+//	virtual void backward(float* outputs, const float* inputs, uint32_t dim)
+//	{
+//	}
+//public:
+//	static Sigmoid* GetInstance()
+//	{
+//		static Sigmoid s_instance;
+//		return &s_instance;
+//	}
+//};
+//
+//class Softmax : public ActivationFunction
+//{
+//public:
+//	virtual void forward(float* outputs, const float* inputs, uint32_t dim)
+//	{
+//		float total = 0;
+//		for (uint32_t i = 0; i < dim; ++i)
+//		{
+//			float tmp = exp(inputs[i]);
+//			outputs[i] = tmp;
+//			total += tmp;
+//		}
+//		float rcpTotal = 1.0 / total;
+//		for (uint32_t i = 0; i < dim; ++i)
+//		{
+//			outputs[i] *= rcpTotal;
+//		}
+//	}
+//	virtual void backward(float* outputs, const float* inputs, uint32_t dim)
+//	{
+//	}
+//public:
+//	static Sigmoid* GetInstance()
+//	{
+//		static Sigmoid s_instance;
+//		return &s_instance;
+//	}
+//};
+//
+
+class LossFunction
 {
 public:
-	virtual void forward(float* outputs, const float* inputs, uint32_t dim) = 0;
-	virtual void backward(float* outputs, const float* inputs, uint32_t dim) = 0;
+	LossFunction(uint32_t dimension)
+	{
+		m_dimension = dimension;
+		m_losses.resize(dimension);
+		m_derivates.resize(dimension);
+	}
+	uint32_t dimension() const
+	{
+		return m_dimension;
+	}
+	const float* derivates()
+	{
+		return m_derivates.data();
+	}
+public:
+	virtual void forward(const float* yHat, const float* yLabel) = 0;
+protected:
+	uint32_t m_dimension;
+	std::vector<float> m_losses;
+	std::vector<float> m_derivates;
 };
 
-class CostFunction
+class MeanSquareError : public LossFunction
 {
 public:
-	virtual float cost(float* y, float* yHat, uint32_t dim) = 0;
-};
-
-class Sigmoid : public ActivationFunction
-{
-public:
-	virtual void forward(float* outputs, const float* inputs, uint32_t dim)
+	//float forward(float* y, float* yHat, uint32_t batch) override
+	//{
+	//	float totalLoss = 0;
+	//	for (uint32_t i = 0; i < batch; ++i)
+	//	{
+	//		float dis = y - yHat;
+	//		float loss = dis * dis;
+	//		totalLoss += loss;
+	//	}
+	//	float c = totalLoss / (2 * batch);
+	//	return c;
+	//}
+	virtual float derivate(float yHat, float yLabel) override
 	{
-		for (uint32_t i = 0; i < dim; ++i)
-		{
-			outputs[i] = 1.0 / (1.0 + exp(-inputs[i]));
-		}
+		float res = 2.0*(yHat - yLabel);
+		return res;
 	}
-	virtual void backward(float* outputs, const float* inputs, uint32_t dim)
-	{
-	}
-public:
-	static Sigmoid* GetInstance()
-	{
-		static Sigmoid s_instance;
-		return &s_instance;
-	}
-};
-
-class Softmax : public ActivationFunction
-{
-public:
-	virtual void forward(float* outputs, const float* inputs, uint32_t dim)
-	{
-		float total = 0;
-		for (uint32_t i = 0; i < dim; ++i)
-		{
-			float tmp = exp(inputs[i]);
-			outputs[i] = tmp;
-			total += tmp;
-		}
-		float rcpTotal = 1.0 / total;
-		for (uint32_t i = 0; i < dim; ++i)
-		{
-			outputs[i] *= rcpTotal;
-		}
-	}
-	virtual void backward(float* outputs, const float* inputs, uint32_t dim)
-	{
-	}
-public:
-	static Sigmoid* GetInstance()
-	{
-		static Sigmoid s_instance;
-		return &s_instance;
-	}
-};
-
-class MeanSquareError : public CostFunction
-{
-public:
-	virtual float cost(float* y, float* yHat, uint32_t batch)
-	{
-		float totalLoss = 0;
-		for (uint32_t i = 0; i < batch; ++i)
-		{
-			float dis = y - yHat;
-			float loss = dis * dis;
-			totalLoss += loss;
-		}
-		float c = totalLoss / (2 * batch);
-		return c;
-	}
-	virtual float derivate(float* y, float* yHat, uint32_t batch)
-	{
-		float d = 0;
-		for (uint32_t i = 0; i < batch; ++i)
-		{
-			float dis = y - yHat;
-			d += dis;
-		}
-		return d;
-	}
-public:
-	static MeanSquareError* GetInstance()
-	{
-		static MeanSquareError s_instance;
-		return &s_instance;
-	}
+//public:
+//	static MeanSquareError* GetInstance()
+//	{
+//		static MeanSquareError s_instance;
+//		return &s_instance;
+//	}
 };
 
 class Layer
@@ -253,17 +268,13 @@ public:
 	{
 		for (uint32_t i = 0; i < m_numOutputs; ++i)
 		{
-			m_features[i] = 1.0 / (1.0 + exp(-inputs[i]));
+			float sigma = 1.0 / (1.0 + exp(-inputs[i]));
+			m_features[i] = sigma;
+			m_derivates[i] = sigma * (1.0 - sigma);
 		}
 	}
 	void backward(const float* inputs) override
 	{
-		for (uint32_t i = 0; i < m_numOutputs; ++i)
-		{
-			float e_x = exp(-inputs[i]);
-			float e_x_1 = e_x + 1.0f;
-			m_derivates[i] = e_x / (e_x_1 * e_x_1);
-		}
 	}
 };
 
@@ -272,16 +283,20 @@ class FNN
 public:
 	void batch(float const* features, float  const* labels, uint32_t batchSize, float learningRate)
 	{
-		uint32_t numInputs;
+		Layer* inputLayer = m_layers.front();
+		uint32_t numInputs = inputLayer->numInputs();
+		Layer* outputLayer = m_layers.back();
+		uint32_t numOutputs = outputLayer->numOutputs();
+
 		for (uint32_t i = 0; i < batchSize; ++i)
 		{
-			float const* inputs = features;
+			float const* inputs = &features[i*numInputs];
 			for (Layer* layer : m_layers)
 			{
-				uint32_t numInputs = layer->numInputs();
-				layer->forward(&inputs[i*numInputs]);
+				layer->forward(inputs);
 				inputs = layer->outputFeatures();
 			}
+			m_loss->forward(inputs, &labels[numOutputs*i]);
 			for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it)
 			{
 				(*it)->backward();
@@ -296,6 +311,7 @@ private:
 
 private:
 	std::vector<Layer*> m_layers;
+	LossFunction* m_loss;
 };
 
 void mnist2bmp()
