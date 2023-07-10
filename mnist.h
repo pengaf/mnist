@@ -1,5 +1,9 @@
 #pragma once
+//http://yann.lecun.com/exdb/mnist/
+
 #include <fstream>
+#include <vector>
+#include <string>
 
 const uint32_t mnist_image_header_flag = 0x00000803;
 const uint32_t mnist_label_header_flag = 0x00000801;
@@ -23,7 +27,7 @@ uint32_t ConvertEndian(uint32_t n)
 	return ((n << 24) & 0xFF000000) | ((n << 8) & 0x00FF0000) | ((n >> 8) & 0x0000FF00) | ((n >> 24) & 0x000000FF);
 }
 
-inline bool ReadImageData(MnistImageHeader& header, std::vector<char>& data, const char* fileName)
+inline bool ReadImageData(MnistImageHeader& header, std::vector<uint8_t>& data, const std::string& fileName)
 {
 	std::ifstream file(fileName, std::ios::binary);
 	if (!file.is_open())
@@ -33,7 +37,7 @@ inline bool ReadImageData(MnistImageHeader& header, std::vector<char>& data, con
 	uint32_t tmp;
 	file.read((char*)&tmp, sizeof(uint32_t));
 	header.magicNumber = ConvertEndian(tmp);
-	if (header.magicNumber != 0x00000803)
+	if (header.magicNumber != mnist_image_header_flag)
 	{
 		return false;
 	}
@@ -46,11 +50,11 @@ inline bool ReadImageData(MnistImageHeader& header, std::vector<char>& data, con
 
 	uint32_t dataSize = header.imageCount*header.rowCount*header.columnCount;
 	data.resize(dataSize);
-	file.read(data.data(), dataSize);
+	file.read((char*)data.data(), dataSize);
 	return true;
 }
 
-inline bool ReadLabelData(MnistLabelHeader& header, std::vector<char>& data, const char* fileName)
+inline bool ReadLabelData(MnistLabelHeader& header, std::vector<uint8_t>& data, const std::string& fileName)
 {
 	std::ifstream file(fileName, std::ios::binary);
 	if (!file.is_open())
@@ -60,7 +64,7 @@ inline bool ReadLabelData(MnistLabelHeader& header, std::vector<char>& data, con
 	uint32_t tmp;
 	file.read((char*)&tmp, sizeof(uint32_t));
 	header.magicNumber = ConvertEndian(tmp);
-	if (header.magicNumber != 0x00000803)
+	if (header.magicNumber != mnist_label_header_flag)
 	{
 		return false;
 	}
@@ -69,6 +73,6 @@ inline bool ReadLabelData(MnistLabelHeader& header, std::vector<char>& data, con
 
 	uint32_t dataSize = header.labelCount;
 	data.resize(dataSize);
-	file.read(data.data(), dataSize);
+	file.read((char*)data.data(), dataSize);
 	return true;
 }

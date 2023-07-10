@@ -1,21 +1,5 @@
-﻿#include <fstream>
+﻿#include "../mnist.h"
 #include <windows.h>
-
-//http://yann.lecun.com/exdb/mnist/
-
-struct MnistImageHeader
-{
-	uint32_t magicNumber;
-	uint32_t imageCount;
-	uint32_t rowCount;
-	uint32_t columnCount;
-};
-
-uint32_t ConvertEndian(uint32_t n)
-{
-	return (((n >> 0) & 0xFF) << 24) | (((n >> 8) & 0xFF) << 16) | (((n >> 16) & 0xFF) << 8) | (((n >> 24) & 0xFF) << 0);
-}
-
 #include <pshpack2.h>
 
 struct BmpFileHeader24 : BITMAPFILEHEADER, BITMAPINFOHEADER
