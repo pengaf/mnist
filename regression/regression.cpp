@@ -9,6 +9,7 @@ float sigmoid(float x)
 	return 1.0 / (1.0 + exp(-x));
 }
 
+template<bool softmax = false>
 class LogisticRegression
 {
 public:
@@ -25,7 +26,7 @@ public:
 		m_sumBiasDerivates.resize(numClassify);
 		for (auto& weight : m_weights)
 		{
-			weight = rand() / (float(RAND_MAX));
+			weight = rand() / (float(RAND_MAX)) * 0.3f;
 		}
 		for (auto& bias : m_biases)
 		{
@@ -69,42 +70,104 @@ public:
 	}
 	void forward(const uint8_t* feature, uint8_t label)
 	{
-		for (uint32_t i = 0; i < m_numClassify; ++i)
+		if (softmax)
 		{
-			float* weights = &m_weights[i * m_featureDimension];
-			float z = m_biases[i];
-			for (uint32_t j = 0; j < m_featureDimension; ++j)
+			float sumExpZ = 0;
+			for (uint32_t i = 0; i < m_numClassify; ++i)
 			{
-				z += feature[j] /255.0f * weights[j];
+				float* weights = &m_weights[i * m_featureDimension];
+				float z = m_biases[i];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					z += feature[j] / 255.0f * weights[j];
+				}
+				float expz = exp(z);
+				m_yHats[i] = z;
+				sumExpZ += expz;
 			}
-			m_yHats[i] = sigmoid(z);
-			float* weightDerivates = &m_weightDerivates[i * m_featureDimension];
+			for (uint32_t i = 0; i < m_numClassify; ++i)
+			{
+				float yHat = exp(m_yHats[i]) / sumExpZ;
+				float yLabel = (i == label ? 1.0 : 0);
+				float zDerivate = (yHat - yLabel);
+				float* weightDerivates = &m_weightDerivates[i * m_featureDimension];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					weightDerivates[j] = zDerivate * feature[j] / 255.0f;
+				}
+				m_biasDerivates[i] = zDerivate;
+			}
+		}
+		else
+		{
+			for (uint32_t i = 0; i < m_numClassify; ++i)
+			{
+				float* weights = &m_weights[i * m_featureDimension];
+				float z = m_biases[i];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					z += feature[j] / 255.0f * weights[j];
+				}
+				m_yHats[i] = sigmoid(z);
 
-			float zDerivate = m_yHats[i] - (i == label ? 1.0 : 0);
-			//zDerivate *= (1 - m_yHats[i]) * m_yHats[i];//mse
-			for (uint32_t j = 0; j < m_featureDimension; ++j)
-			{
-				weightDerivates[j] = zDerivate * feature[j] / 255.0f;
+				float yLabel = (i == label ? 1.0 : 0);
+				float zDerivate = m_yHats[i] - yLabel;
+				float* weightDerivates = &m_weightDerivates[i * m_featureDimension];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					weightDerivates[j] = zDerivate * feature[j] / 255.0f;
+				}
+				m_biasDerivates[i] = zDerivate;
 			}
-			m_biasDerivates[i] = zDerivate;
 		}
 	}
 	uint8_t evaluate(const uint8_t* feature)
 	{
-		for (uint32_t i = 0; i < m_numClassify; ++i)
+		if (softmax)
 		{
-			float* weights = &m_weights[i * m_featureDimension];
-			float z = m_biases[i];
-			for (uint32_t j = 0; j < m_featureDimension; ++j)
+			for (uint32_t i = 0; i < m_numClassify; ++i)
 			{
-				z += feature[j] / 255.0f * weights[j];
+				float* weights = &m_weights[i * m_featureDimension];
+				float z = m_biases[i];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					z += feature[j] / 255.0f * weights[j];
+				}
+				//float expz = exp(z);
+				m_yHats[i] = z;
 			}
-			m_yHats[i] = sigmoid(z);
+		}
+		else
+		{
+			for (uint32_t i = 0; i < m_numClassify; ++i)
+			{
+				float* weights = &m_weights[i * m_featureDimension];
+				float z = m_biases[i];
+				for (uint32_t j = 0; j < m_featureDimension; ++j)
+				{
+					z += feature[j] / 255.0f * weights[j];
+				}
+				m_yHats[i] = sigmoid(z);
+			}
 		}
 		uint32_t index = std::distance(m_yHats.begin(), std::max_element(m_yHats.begin(), m_yHats.end()));
 		return index;
 	}
 
+	float test(const uint8_t* features, const uint8_t* labels, uint32_t count)
+	{
+		uint32_t errorCount = 0;
+		for (uint32_t i = 0; i < count; ++i)
+		{
+			uint8_t yHat = evaluate(features + i * m_featureDimension);
+			uint8_t yLabel = *(labels + i);
+			if (yHat != yLabel)
+			{
+				++errorCount;
+			}
+		}
+		return float(errorCount) / float(count);
+	}
 public:
 	uint32_t m_featureDimension;
 	uint32_t m_numClassify;
@@ -141,34 +204,47 @@ int main()
 	uint32_t featureDimension = trainImageHeader.columnCount * trainImageHeader.rowCount;
 	uint32_t validationCount = trainImageHeader.imageCount / 10;
 	uint32_t trainCount = trainImageHeader.imageCount - validationCount;
+	uint32_t testCount = testImageHeader.imageCount;
 
-	LogisticRegression logisticRegression(featureDimension, 10);
+	LogisticRegression<true> logisticRegression(featureDimension, 10);
 
-	uint32_t batchSize = 100;
+	uint32_t batchSize = 10;
 	uint32_t numBatch = trainCount / batchSize;
-	float eta = 0.1;
-	uint32_t epoch = 10;
+	float eta = 0.003;
+	uint32_t epoch = 40;
+
+
+	uint32_t errorCount = 0;
+	for (uint32_t i = 0; i < validationCount; ++i)
+	{
+		uint8_t yHat = logisticRegression.evaluate(trainImages.data() + (trainCount + i) * featureDimension);
+		uint8_t yLabel = *(trainLabels.data() + trainCount + i);
+		if (yHat != yLabel)
+		{
+			++errorCount;
+		}
+	}
+
+	printf("init error %f, %f, %f\n", 
+		logisticRegression.test(trainImages.data(), trainLabels.data(), trainCount) * 100,
+		logisticRegression.test(trainImages.data() + trainCount * featureDimension, trainLabels.data() + trainCount, validationCount) * 100,
+		logisticRegression.test(testImages.data(), testLabels.data(), testCount) * 100);
+
+
 	for (uint32_t e = 0; e < epoch; ++e)
 	{
 		for (uint32_t b = 0; b < numBatch; ++b)
 		{
 			logisticRegression.miniBatch(trainImages.data() + b * batchSize * featureDimension, trainLabels.data() + b * batchSize, batchSize, eta);
 		}
-		uint32_t errorCount = 0;
-		for (uint32_t i = 0; i < validationCount; ++i)
-		{
-			uint8_t yHat = logisticRegression.evaluate(trainImages.data() + (trainCount + i) * featureDimension);
-			uint8_t yLabel = *(trainLabels.data() + trainCount + i);
-			if (yHat != yLabel)
-			{
-				++errorCount;
-			}
-		}
-		printf("validation errorRate %f\n", float(errorCount) / float(validationCount) * 100);
+		printf("%d: error %f, %f, %f\n", e + 1,
+			logisticRegression.test(trainImages.data(), trainLabels.data(), trainCount) * 100,
+			logisticRegression.test(trainImages.data() + trainCount * featureDimension, trainLabels.data() + trainCount, validationCount) * 100,
+			logisticRegression.test(testImages.data(), testLabels.data(), testCount) * 100);
 	}
 
 	std::unordered_map<uint32_t, uint32_t> errors;
-	uint32_t errorCount = 0;
+
 	for (uint32_t i = 0; i < testImageHeader.imageCount; ++i)
 	{
 		uint8_t yHat = logisticRegression.evaluate(testImages.data() + i * featureDimension);
@@ -180,7 +256,6 @@ int main()
 			errors.insert(std::make_pair(key, 1)).first->second++;
 		}
 	}
-	printf("test errorRate %f\n", float(errorCount) / float(testImageHeader.imageCount) * 100);
 
 	std::multimap<uint32_t, uint32_t> sortedErrors;
 	for (auto it = errors.begin(); it != errors.end(); ++it)
@@ -192,7 +267,7 @@ int main()
 		uint32_t key = it->second;
 		uint32_t yLabel = key & 0xff;
 		uint32_t yHat = key >> 8;
-		printf("errors: %d, %d, %d\n", yLabel, yHat, it->first);
+		//printf("errors: %d, %d, %d\n", yLabel, yHat, it->first);
 	}
 	//mnist2bmp(path + "/data/t10k-images.bmp", path + "/data/t10k-images.idx3-ubyte");
 }
